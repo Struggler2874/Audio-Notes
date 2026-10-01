@@ -2,7 +2,9 @@ import logging
 import mimetypes
 import os
 import tempfile
+import threading
 import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import UUID
 
@@ -13,15 +15,26 @@ from fastapi.middleware.cors import CORSMiddleware
 import audio
 import db
 import storage
+import worker
 
 load_dotenv()
+logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("audio-notes")
 
 ALLOWED_EXT = {".wav", ".mp3", ".m4a", ".ogg", ".flac", ".aac"}
 LANGUAGES = {"bn-IN", "en-IN", "gu-IN", "hi-IN", "kn-IN", "ml-IN", "mr-IN", "pa-IN", "ta-IN", "te-IN"}
 MAX_BYTES = 50 * 1024 * 1024  # Supabase free plan allows 50 MB per file
 
-app = FastAPI(title="Audio Notes API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Start the background worker thread when the server starts
+    if os.getenv("RUN_WORKER", "true").lower() == "true":
+        threading.Thread(target=worker.run_forever, name="worker", daemon=True).start()
+    yield
+
+
+app = FastAPI(title="Audio Notes API", lifespan=lifespan)
 
 origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(
@@ -50,7 +63,6 @@ def upload_recording(file: UploadFile = File(...), language: str = Form("en-IN")
     rec_id = uuid.uuid4()
     storage_path = f"{rec_id}{suffix}"
     tmp_path = None
-    uploaded = False
 
     try:
         # 1. Stream the upload to a temp file, enforcing the size limit
@@ -75,7 +87,6 @@ def upload_recording(file: UploadFile = File(...), language: str = Form("en-IN")
         content_type = mimetypes.guess_type(file.filename)[0] or "application/octet-stream"
         try:
             storage.upload_file(storage_path, tmp_path, content_type)
-            uploaded = True
         except Exception:
             log.exception("Storage upload failed")
             raise HTTPException(502, "Could not save the file to storage. Please try again.")
@@ -107,4 +118,14 @@ def get_recording(recording_id: UUID):
     row = db.get_recording(recording_id)
     if not row:
         raise HTTPException(404, "Recording not found.")
+    return row
+
+
+@app.post("/recordings/{recording_id}/retry")
+def retry_recording(recording_id: UUID):
+    if not db.get_recording(recording_id):
+        raise HTTPException(404, "Recording not found.")
+    row = db.requeue(recording_id)
+    if not row:
+        raise HTTPException(409, "Only failed recordings, or ones missing a summary, can be retried.")
     return row
