@@ -4,3 +4,9 @@ __pycache__/
 venv/
 .venv/
 .next/
+*.wav
+*.mp3
+   *.m4a
+   *.ogg
+   *.flac
+   *.aac
