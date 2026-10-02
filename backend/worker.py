@@ -66,11 +66,19 @@ def process(job: dict):
             for i, chunk in enumerate(chunks, start=1):
                 pct = 10 + int(75 * (i - 1) / total)
                 db.update_progress(rec_id, pct, f"Transcribing part {i} of {total}...")
-                parts.append(gnani.transcribe_chunk(chunk, job["language"]))
+                try:
+                    parts.append(gnani.transcribe_chunk(chunk, job["language"]))
+                except TranscriptionError as e:
+                    # Tell the user which part failed
+                    raise TranscriptionError(f"Part {i} of {total}: {e}") from e
 
         transcript = " ".join(p for p in parts if p).strip()
         if not transcript:
-            raise JobError("No speech was detected in this audio.")
+            raise JobError(
+                "No speech was detected in this audio. Check that the selected language "
+                "matches what is spoken, and that the file contains clear speech "
+                "(music usually does not work)."
+            )
         db.save_transcript(rec_id, transcript)  # keep it even if the summary fails
 
     db.update_progress(rec_id, 90, "Writing summary...")

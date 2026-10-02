@@ -15,6 +15,11 @@ export const LANGUAGES = [
   { code: "te-IN", label: "Telugu" },
 ];
 
+// Render's free server can take about a minute to wake up, so allow for that
+// but never wait forever.
+const REQUEST_TIMEOUT_MS = 70_000;
+const SERVER_SAVE_TIMEOUT_MS = 90_000;
+
 export type Status = "queued" | "processing" | "completed" | "failed";
 
 export type Recording = {
@@ -42,11 +47,24 @@ async function errorMessage(res: Response): Promise<string> {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   let res: Response;
   try {
-    res = await fetch(`${API_URL}${path}`, { cache: "no-store", ...init });
-  } catch {
+    res = await fetch(`${API_URL}${path}`, {
+      cache: "no-store",
+      ...init,
+      signal: controller.signal,
+    });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") {
+      throw new Error(
+        "The server took too long to respond. It may be waking up, so please try again in a minute."
+      );
+    }
     throw new Error("Could not reach the server. Check your connection and try again.");
+  } finally {
+    clearTimeout(timer);
   }
   if (!res.ok) throw new Error(await errorMessage(res));
   return res.json();
@@ -69,12 +87,29 @@ export function uploadRecording(
     form.append("file", file);
     form.append("language", language);
 
+    let serverTimer: ReturnType<typeof setTimeout> | undefined;
+    const stopTimer = () => {
+      if (serverTimer) clearTimeout(serverTimer);
+    };
+
     xhr.open("POST", `${API_URL}/recordings`);
-    xhr.timeout = 10 * 60 * 1000;
+    xhr.timeout = 15 * 60 * 1000;
+
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
     };
+
+    // The whole file has been sent. Now the server checks and saves it;
+    // if it does not answer in time, stop waiting and show an error.
+    xhr.upload.onload = () => {
+      serverTimer = setTimeout(() => {
+        xhr.abort();
+        reject(new Error("The server took too long to save the file. Please try again."));
+      }, SERVER_SAVE_TIMEOUT_MS);
+    };
+
     xhr.onload = () => {
+      stopTimer();
       let body: any = null;
       try {
         body = JSON.parse(xhr.responseText);
@@ -82,10 +117,21 @@ export function uploadRecording(
         /* not JSON */
       }
       if (xhr.status >= 200 && xhr.status < 300) resolve(body);
-      else reject(new Error(typeof body?.detail === "string" ? body.detail : `Upload failed (${xhr.status}).`));
+      else
+        reject(
+          new Error(typeof body?.detail === "string" ? body.detail : `Upload failed (${xhr.status}).`)
+        );
     };
-    xhr.onerror = () => reject(new Error("Upload failed: could not reach the server."));
-    xhr.ontimeout = () => reject(new Error("The upload timed out. Please try again."));
+    xhr.onerror = () => {
+      stopTimer();
+      reject(new Error("Upload failed: could not reach the server."));
+    };
+    xhr.ontimeout = () => {
+      stopTimer();
+      reject(new Error("The upload timed out. Please try again."));
+    };
+    xhr.onabort = stopTimer;
+
     xhr.send(form);
   });
 }

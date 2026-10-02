@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import Header from "@/components/Header";
 import { LANGUAGES, getRecording, retryRecording, type Recording } from "@/lib/api";
 
 function formatDuration(seconds: number | null) {
@@ -67,118 +68,140 @@ export default function RecordingPage() {
   }
 
   const back = (
-    <Link href="/" className="text-sm text-blue-600 underline">
+    <Link href="/" className="text-sm font-medium text-indigo-600 hover:text-indigo-800">
       &larr; All recordings
     </Link>
   );
 
+  const language = LANGUAGES.find((l) => l.code === rec?.language)?.label ?? rec?.language;
+
   if (notFound) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        {back}
-        <p className="mt-6">This recording does not exist.</p>
-      </main>
+      <div>
+        <Header />
+        <main className="mx-auto max-w-3xl px-6 py-8">
+          {back}
+          <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-600 shadow-sm">
+            This recording does not exist.
+          </div>
+        </main>
+      </div>
     );
   }
 
-  const language = LANGUAGES.find((l) => l.code === rec?.language)?.label ?? rec?.language;
-
   return (
-    <main className="mx-auto max-w-3xl p-6">
-      {back}
+    <div>
+      <Header />
+      <main className="mx-auto max-w-3xl px-6 py-8">
+        {back}
 
-      {!rec && !error && <p className="mt-6 text-gray-500">Loading...</p>}
+        {!rec && !error && <div className="mt-6 h-32 animate-pulse rounded-2xl bg-slate-200" />}
 
-      {error && (
-        <p role="alert" className="mt-4 rounded bg-red-50 p-3 text-sm text-red-700">
-          {error}{" "}
-          <button onClick={load} className="underline">Try again</button>
-        </p>
-      )}
-
-      {rec && (
-        <>
-          <h1 className="mt-4 break-words text-2xl font-bold">{rec.filename}</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            {language}
-            {rec.duration_seconds ? ` · ${formatDuration(rec.duration_seconds)}` : ""}
-            {" · "}
-            {new Date(rec.created_at).toLocaleString()}
+        {error && (
+          <p role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}{" "}
+            <button onClick={load} className="font-medium underline">Try again</button>
           </p>
+        )}
 
-          {(rec.status === "queued" || rec.status === "processing") && (
-            <section className="mt-6 rounded-lg border p-4">
-              <div className="h-2 w-full overflow-hidden rounded bg-gray-200">
-                <div
-                  className="h-2 bg-blue-600 transition-all"
-                  style={{ width: `${Math.max(rec.progress, 3)}%` }}
-                />
-              </div>
-              <p className="mt-2 text-sm">
-                {rec.status === "queued"
-                  ? "Waiting in the queue..."
-                  : rec.progress_message ?? "Processing..."}{" "}
-                <span className="text-gray-500">({rec.progress}%)</span>
-              </p>
-              <p className="mt-1 text-xs text-gray-500">
-                This runs on the server, so you can leave this page and come back later.
-              </p>
-            </section>
-          )}
+        {rec && (
+          <>
+            <h1 className="mt-4 break-words text-2xl font-bold text-slate-900">{rec.filename}</h1>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+              <span className="rounded-full bg-slate-200 px-2.5 py-1 text-slate-700">{language}</span>
+              {rec.duration_seconds ? (
+                <span className="rounded-full bg-slate-200 px-2.5 py-1 text-slate-700">
+                  {formatDuration(rec.duration_seconds)}
+                </span>
+              ) : null}
+              <span className="rounded-full bg-slate-200 px-2.5 py-1 text-slate-700">
+                {new Date(rec.created_at).toLocaleString()}
+              </span>
+            </div>
 
-          {rec.status === "failed" && (
-            <section role="alert" className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4">
-              <p className="font-medium text-red-800">This recording could not be processed.</p>
-              <p className="mt-1 text-sm text-red-700">{rec.error_message}</p>
-              <button
-                onClick={onRetry}
-                disabled={retrying}
-                className="mt-3 rounded bg-red-600 px-3 py-1 text-sm text-white disabled:opacity-50"
-              >
-                {retrying ? "Retrying..." : "Try again"}
-              </button>
-            </section>
-          )}
-
-          {rec.status === "completed" && (
-            <>
-              {rec.error_message && (
-                <section role="alert" className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
-                  <p className="text-sm text-amber-800">{rec.error_message}</p>
-                  <button
-                    onClick={onRetry}
-                    disabled={retrying}
-                    className="mt-3 rounded bg-amber-600 px-3 py-1 text-sm text-white disabled:opacity-50"
-                  >
-                    {retrying ? "Retrying..." : "Retry summary"}
-                  </button>
-                </section>
-              )}
-
-              {rec.summary && (
-                <section className="mt-6">
-                  <h2 className="mb-2 font-semibold">Summary</h2>
-                  <p className="whitespace-pre-wrap rounded-lg bg-gray-50 p-4 text-sm leading-relaxed">
-                    {rec.summary}
+            {(rec.status === "queued" || rec.status === "processing") && (
+              <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="flex items-baseline justify-between">
+                  <p className="font-medium text-slate-900">
+                    {rec.status === "queued"
+                      ? "Waiting in the queue..."
+                      : rec.progress_message ?? "Processing..."}
                   </p>
-                </section>
-              )}
-
-              <section className="mt-6">
-                <div className="mb-2 flex items-center justify-between">
-                  <h2 className="font-semibold">Transcript</h2>
-                  <button onClick={copyTranscript} className="text-sm text-blue-600 underline">
-                    {copied ? "Copied!" : "Copy"}
-                  </button>
+                  <span className="text-2xl font-bold text-indigo-600">{rec.progress}%</span>
                 </div>
-                <p className="whitespace-pre-wrap rounded-lg border p-4 text-sm leading-relaxed">
-                  {rec.transcript}
+                <div className="mt-3 h-3 w-full overflow-hidden rounded-full bg-slate-200">
+                  <div
+                    className="h-3 animate-pulse rounded-full bg-indigo-600 transition-all duration-500"
+                    style={{ width: `${Math.max(rec.progress, 3)}%` }}
+                  />
+                </div>
+                <p className="mt-3 text-xs text-slate-500">
+                  This runs on the server, so you can leave this page and come back later.
                 </p>
               </section>
-            </>
-          )}
-        </>
-      )}
-    </main>
+            )}
+
+            {rec.status === "failed" && (
+              <section role="alert" className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-6">
+                <p className="font-semibold text-red-800">This recording could not be processed.</p>
+                <p className="mt-1 text-sm text-red-700">{rec.error_message}</p>
+                <button
+                  onClick={onRetry}
+                  disabled={retrying}
+                  className="mt-4 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  {retrying ? "Retrying..." : "Try again"}
+                </button>
+              </section>
+            )}
+
+            {rec.status === "completed" && (
+              <>
+                {rec.error_message && (
+                  <section role="alert" className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+                    <p className="text-sm text-amber-800">{rec.error_message}</p>
+                    <button
+                      onClick={onRetry}
+                      disabled={retrying}
+                      className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+                    >
+                      {retrying ? "Retrying..." : "Retry summary"}
+                    </button>
+                  </section>
+                )}
+
+                {rec.summary && (
+                  <section className="mt-6 rounded-2xl border border-indigo-100 bg-indigo-50 p-6">
+                    <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-indigo-700">
+                      Summary
+                    </h2>
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800">
+                      {rec.summary}
+                    </p>
+                  </section>
+                )}
+
+                <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
+                      Transcript
+                    </h2>
+                    <button
+                      onClick={copyTranscript}
+                      className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      {copied ? "Copied!" : "Copy"}
+                    </button>
+                  </div>
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800">
+                    {rec.transcript}
+                  </p>
+                </section>
+              </>
+            )}
+          </>
+        )}
+      </main>
+    </div>
   );
 }

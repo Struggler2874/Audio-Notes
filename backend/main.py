@@ -8,9 +8,11 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import UUID
 
+import psycopg
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 import audio
 import db
@@ -36,7 +38,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Audio Notes API", lifespan=lifespan)
 
-origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+origins = [
+    o.strip().rstrip("/")
+    for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+    if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -45,9 +51,27 @@ app.add_middleware(
 )
 
 
+@app.exception_handler(psycopg.Error)
+async def database_error_handler(request: Request, exc: psycopg.Error):
+    # Any database failure becomes a clear 503 instead of a raw crash.
+    # This runs inside the CORS middleware, so the browser can read the message.
+    log.error("Database error on %s %s: %s", request.method, request.url.path, exc)
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "The database is temporarily unavailable. Please try again in a moment."},
+    )
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+def _parse_id(recording_id: str) -> UUID:
+    try:
+        return UUID(recording_id)
+    except ValueError:
+        raise HTTPException(404, "Recording not found.")
 
 
 # These are plain `def` (not `async def`) on purpose: they call blocking code
@@ -100,7 +124,10 @@ def upload_recording(file: UploadFile = File(...), language: str = Form("en-IN")
                 storage.delete_file(storage_path)  # don't leave an orphan file behind
             except Exception:
                 log.exception("Cleanup of orphan file failed")
-            raise HTTPException(500, "Could not save the recording. Please try again.")
+            raise HTTPException(
+                503,
+                "Could not save the recording because the database is unavailable. Please try again.",
+            )
 
         return row
     finally:
@@ -114,18 +141,19 @@ def list_recordings():
 
 
 @app.get("/recordings/{recording_id}")
-def get_recording(recording_id: UUID):
-    row = db.get_recording(recording_id)
+def get_recording(recording_id: str):
+    row = db.get_recording(_parse_id(recording_id))
     if not row:
         raise HTTPException(404, "Recording not found.")
     return row
 
 
 @app.post("/recordings/{recording_id}/retry")
-def retry_recording(recording_id: UUID):
-    if not db.get_recording(recording_id):
+def retry_recording(recording_id: str):
+    rec_id = _parse_id(recording_id)
+    if not db.get_recording(rec_id):
         raise HTTPException(404, "Recording not found.")
-    row = db.requeue(recording_id)
+    row = db.requeue(rec_id)
     if not row:
         raise HTTPException(409, "Only failed recordings, or ones missing a summary, can be retried.")
     return row

@@ -1,15 +1,17 @@
 import os
+
 import psycopg
-from psycopg.rows import dict_row
 from dotenv import load_dotenv
+from psycopg.rows import dict_row
 
 load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 
 def get_conn():
-    # dict_row makes each row a dict, e.g. row["status"]
-    return psycopg.connect(DATABASE_URL, row_factory=dict_row)
+    # dict_row makes each row a dict, e.g. row["status"].
+    # connect_timeout: fail after 5 seconds instead of waiting forever when the database is unreachable.
+    return psycopg.connect(DATABASE_URL, row_factory=dict_row, connect_timeout=5)
 
 
 def insert_recording(rec_id, filename, language, storage_path, duration):
@@ -35,12 +37,12 @@ def list_recordings():
         ).fetchall()
 
 
-
 def get_recording(rec_id):
     with get_conn() as conn:
         return conn.execute(
             "select * from recordings where id = %s", (rec_id,)
         ).fetchone()
+
 
 def update_progress(rec_id, progress, message):
     with get_conn() as conn:
