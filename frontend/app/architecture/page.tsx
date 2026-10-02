@@ -39,7 +39,21 @@ export default function ArchitecturePage() {
           Gemini API.
         </p>
       </Section>
-
+               <Section title="Where it is hosted">
+           <ul className="list-disc space-y-1 pl-5">
+             <li><b>Frontend:</b> Next.js on Vercel.</li>
+             <li>
+               <b>Backend and background worker:</b> FastAPI in a Docker container on Render
+               (the Docker image installs ffmpeg).
+             </li>
+             <li><b>Database and file storage:</b> Supabase (Postgres and a private storage bucket).</li>
+           </ul>
+           <p>
+             The backend runs on Render&apos;s free plan, which puts the server to sleep after 15
+             minutes without traffic. The first request after a quiet period can take about a minute
+             while it wakes up. A paid always-on instance would remove this delay.
+           </p>
+         </Section>
       <Section title="The flow from upload to transcript">
         <ol className="list-decimal space-y-2 pl-5">
           <li>
