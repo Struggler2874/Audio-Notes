@@ -40,6 +40,8 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [slow, setSlow] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   const refresh = useCallback(async () => {
     try {
@@ -114,6 +116,13 @@ export default function Home() {
       setUploading(false);
     }
   }
+
+  // Search by file name and filter by status (done in the browser)
+  const visible = recordings.filter(
+    (r) =>
+      (statusFilter === "all" || r.status === statusFilter) &&
+      r.filename.toLowerCase().includes(query.trim().toLowerCase())
+  );
 
   return (
     <div>
@@ -237,6 +246,29 @@ export default function Home() {
         <section className="mt-10">
           <h2 className="mb-3 text-lg font-semibold text-slate-900">Past uploads</h2>
 
+          {recordings.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-2">
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by file name"
+                className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              />
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              >
+                <option value="all">All statuses</option>
+                <option value="completed">Completed</option>
+                <option value="processing">Processing</option>
+                <option value="queued">Queued</option>
+                <option value="failed">Failed</option>
+              </select>
+            </div>
+          )}
+
           {loading && (
             <>
               <div className="space-y-2">
@@ -265,8 +297,12 @@ export default function Home() {
             </div>
           )}
 
+          {!loading && !listError && recordings.length > 0 && visible.length === 0 && (
+            <p className="text-sm text-slate-500">No recordings match your search.</p>
+          )}
+
           <ul className="mt-2 flex flex-col gap-2">
-            {recordings.map((r) => {
+            {visible.map((r) => {
               const st = STATUS_STYLE[r.status] ?? STATUS_STYLE.queued;
               return (
                 <li key={r.id}>

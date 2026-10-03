@@ -67,6 +67,20 @@ export default function RecordingPage() {
     }
   }
 
+  function downloadText() {
+    if (!rec) return;
+    const lines = [rec.filename, ""];
+    if (rec.summary) lines.push("SUMMARY", rec.summary, "");
+    lines.push("TRANSCRIPT", rec.transcript ?? "");
+    const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = rec.filename.replace(/\.[^.]+$/, "") + "-notes.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   const back = (
     <Link href="/" className="text-sm font-medium text-indigo-600 hover:text-indigo-800">
       &larr; All recordings
@@ -186,12 +200,20 @@ export default function RecordingPage() {
                     <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
                       Transcript
                     </h2>
-                    <button
-                      onClick={copyTranscript}
-                      className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                    >
-                      {copied ? "Copied!" : "Copy"}
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={copyTranscript}
+                        className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        {copied ? "Copied!" : "Copy"}
+                      </button>
+                      <button
+                        onClick={downloadText}
+                        className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        Download .txt
+                      </button>
+                    </div>
                   </div>
                   <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800">
                     {rec.transcript}
