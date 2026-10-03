@@ -74,8 +74,11 @@ def transcribe_chunk(path: str, language: str, attempts: int = 3) -> str:
         else:
             if resp.status_code == 200:
                 try:
-                    return (resp.json().get("transcript") or "").strip()
-                except ValueError:
+                    data = resp.json()
+                    # "output.literal" has correct word spacing; fall back to "transcript"
+                    literal = (data.get("output") or {}).get("literal")
+                    return (literal or data.get("transcript") or "").strip()
+                except (ValueError, AttributeError):
                     last_error = "The transcription service sent an unreadable response."
             elif resp.status_code in RETRY_STATUSES:
                 last_error = f"The transcription service is busy or down ({resp.status_code})."
