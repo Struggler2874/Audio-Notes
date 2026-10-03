@@ -7,12 +7,21 @@ A web app where you upload an audio file and get back a transcript (Gnani ASR) a
 
 Note: the backend is on a free plan and sleeps when idle, so the first load can take about a minute.
 
+## Features
+- Drag-and-drop upload with a live progress bar
+- Transcript and summary for each recording, with live processing progress
+- Long audio handled by splitting it into chunks
+- Past uploads list with search and status filter, and every recording can be reopened
+- Copy the transcript, or download the notes as a text file
+- Clear messages for every failure, with Try again and Retry summary buttons
+
 ## Stack
 - Frontend: Next.js (App Router), Tailwind CSS
 - Backend: FastAPI, with a background worker thread
-- Database and file storage: Supabase (Postgres and a storage bucket)
+- Database and file storage: Supabase (Postgres and a private storage bucket)
 - Transcription: Gnani speech-to-text API
 - Summary: Google Gemini API
+- Hosting: Vercel (frontend), Render with Docker (backend)
 
 ## How it works
 1. The browser uploads the file to FastAPI, which validates it with ffprobe, saves it in the bucket and creates a `queued` row.
@@ -32,7 +41,7 @@ Backend:
     python -m pip install -r requirements.txt
     python -m uvicorn main:app --reload
 
-Create `backend/.env` with: GNANI_API_KEY, DATABASE_URL, SUPABASE_URL, SUPABASE_SERVICE_KEY, GEMINI_API_KEY (and optionally GEMINI_MODEL, ALLOWED_ORIGINS).
+Copy `backend/.env.example` to `backend/.env` and fill in the values.
 
 Frontend:
 

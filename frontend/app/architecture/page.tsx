@@ -1,8 +1,9 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 export const metadata = { title: "Architecture · Audio Notes" };
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="mt-8">
       <h2 className="mb-2 text-lg font-semibold">{title}</h2>
@@ -39,21 +40,63 @@ export default function ArchitecturePage() {
           Gemini API.
         </p>
       </Section>
-               <Section title="Where it is hosted">
-           <ul className="list-disc space-y-1 pl-5">
-             <li><b>Frontend:</b> Next.js on Vercel.</li>
-             <li>
-               <b>Backend and background worker:</b> FastAPI in a Docker container on Render
-               (the Docker image installs ffmpeg).
-             </li>
-             <li><b>Database and file storage:</b> Supabase (Postgres and a private storage bucket).</li>
-           </ul>
-           <p>
-             The backend runs on Render&apos;s free plan, which puts the server to sleep after 15
-             minutes without traffic. The first request after a quiet period can take about a minute
-             while it wakes up. A paid always-on instance would remove this delay.
-           </p>
-         </Section>
+
+      <Section title="Where it is hosted">
+        <ul className="list-disc space-y-1 pl-5">
+          <li><b>Frontend:</b> Next.js on Vercel.</li>
+          <li>
+            <b>Backend and background worker:</b> FastAPI in a Docker container on Render
+            (the Docker image installs ffmpeg).
+          </li>
+          <li><b>Database and file storage:</b> Supabase (Postgres and a private storage bucket).</li>
+        </ul>
+        <p>
+          The backend runs on Render&apos;s free plan, which puts the server to sleep after 15
+          minutes without traffic. The first request after a quiet period can take about a minute
+          while it wakes up. A paid always-on instance would remove this delay.
+        </p>
+      </Section>
+
+      <Section title="System diagram">
+        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4">
+          <div className="flex min-w-[640px] items-center gap-2 text-center text-xs">
+            <div className="flex-1 rounded-lg bg-indigo-50 p-3">
+              <b>Browser</b>
+              <br />
+              Next.js on Vercel
+            </div>
+            <span>&rarr;</span>
+            <div className="flex-1 rounded-lg bg-indigo-50 p-3">
+              <b>FastAPI</b>
+              <br />
+              Render (Docker)
+            </div>
+            <span>&harr;</span>
+            <div className="flex-1 rounded-lg bg-emerald-50 p-3">
+              <b>Supabase</b>
+              <br />
+              Postgres + bucket
+            </div>
+            <span>&larr;</span>
+            <div className="flex-1 rounded-lg bg-amber-50 p-3">
+              <b>Worker</b>
+              <br />
+              background thread
+            </div>
+            <span>&rarr;</span>
+            <div className="flex-1 rounded-lg bg-slate-100 p-3">
+              <b>Gnani + Gemini</b>
+              <br />
+              transcript + summary
+            </div>
+          </div>
+        </div>
+        <p className="text-xs text-slate-500">
+          The browser only talks to the API. The API saves the file and a queued row, and the worker
+          does the slow work and writes the results back to the database, which the page polls.
+        </p>
+      </Section>
+
       <Section title="The flow from upload to transcript">
         <ol className="list-decimal space-y-2 pl-5">
           <li>
@@ -157,7 +200,8 @@ export default function ArchitecturePage() {
           </li>
           <li>
             Raw errors from other services are logged but never shown. The user sees a plain message
-            such as &quot;No speech was detected in this audio&quot;.
+            such as &quot;No speech was detected in this audio&quot;, and for a failed chunk, which
+            part failed.
           </li>
           <li>
             If the transcript succeeds but the summary fails, the transcript is kept and the page
@@ -169,6 +213,14 @@ export default function ArchitecturePage() {
           </li>
           <li>
             If the API cannot be reached at all, the frontend says so and offers to try again.
+          </li>
+          <li>
+            Database connections time out after 5 seconds, and a database error is reported as
+            &quot;temporarily unavailable&quot; instead of hanging.
+          </li>
+          <li>
+            Requests from the browser also have time limits, so a slow or sleeping server produces a
+            clear message instead of a page that loads forever.
           </li>
           <li>Failed recordings have a &quot;Try again&quot; button that re-queues the job.</li>
         </ul>
@@ -182,6 +234,36 @@ export default function ArchitecturePage() {
           browser, the user can close the tab and come back later, and the list of past uploads shows
           the live status of each recording.
         </p>
+      </Section>
+
+      <Section title="Extra features">
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <b>Search and filter:</b> the list of past uploads can be searched by file name and
+            filtered by status.
+          </li>
+          <li>
+            <b>Download:</b> a finished recording can be downloaded as a text file with its summary
+            and transcript.
+          </li>
+          <li><b>Copy:</b> the transcript can be copied with one click.</li>
+          <li><b>Drag and drop</b> upload, with a live upload progress bar.</li>
+        </ul>
+      </Section>
+
+      <Section title="Known limits">
+        <ul className="list-disc space-y-1 pl-5">
+          <li>Files are limited to 50 MB (the per-file limit of Supabase&apos;s free plan).</li>
+          <li>The worker runs one job at a time, so uploads made together are processed in turn.</li>
+          <li>There are no user accounts, so every upload is visible to everyone.</li>
+          <li>
+            The free backend sleeps after 15 minutes without traffic, so the first request after that
+            can take about a minute.
+          </li>
+          <li>
+            Chunks are cut every 28 seconds, so a word at a boundary can occasionally be split.
+          </li>
+        </ul>
       </Section>
 
       <Section title="What I would do differently with more time">
@@ -204,15 +286,20 @@ export default function ArchitecturePage() {
             half at a boundary. Transcribe a few chunks in parallel to finish faster.
           </li>
           <li>
+            <b>Skip repeated work:</b> hash each upload and reuse the saved transcript and summary if
+            the same file is uploaded again, which would also save API credits.
+          </li>
+          <li>
             <b>Gnani&apos;s batch API</b> for very large files, instead of many small requests.
           </li>
           <li>
             <b>User accounts</b>, so recordings are private. Right now anyone with the link can open a
-            recording, and the list shows all uploads.
+            recording, and the list shows all uploads. With accounts, delete and rename actions would
+            also become safe to add.
           </li>
           <li>
-            Delete and rename actions, automatic clean-up of old files, rate limiting, server-sent
-            events instead of polling, and automated tests.
+            Automatic clean-up of old files, rate limiting, server-sent events instead of polling,
+            and automated tests.
           </li>
         </ul>
       </Section>
